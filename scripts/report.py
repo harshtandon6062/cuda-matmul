@@ -170,7 +170,7 @@ def table_by_size(df):
 
 def table_detail(df, n):
     d = df[df.N == n]
-    lines = ["| Kernel | Time (ms) | GFLOPS | % of cuBLAS | % of peak | Max rel. error vs cuBLAS | SM clock (MHz) |",
+    lines = ["| Kernel | Time (ms) | GFLOPS | % of cuBLAS | % of peak | Max rel. error vs cuBLAS | SM clock, NVML (MHz, indicative) |",
              "|---|---:|---:|---:|---:|---:|---:|"]
     for kid, label, _ in [CUBLAS] + KERNELS:
         r = d[d.kernel == kid]

@@ -1,12 +1,18 @@
 # SGEMM from scratch: optimizing matrix multiply on an RTX 3050 Laptop GPU
 
-{{SUMMARY}}
+Six CUDA kernels for FP32 matrix multiplication (SGEMM, `C = αAB + βC`), written from scratch and
+optimized step by step on an **NVIDIA GeForce RTX 3050 6GB Laptop GPU**. Each one is benchmarked against
+cuBLAS, profiled with Nsight Compute, and explained for someone learning CUDA.
+
+**Headline (N = 4096):** the best kernel runs at **4,173 GFLOPS, 95.1% of cuBLAS** (4,388 GFLOPS) and
+**56.6× faster than the naive kernel** (73.7 GFLOPS). Every output is verified element by element against
+cuBLAS before it is timed.
 
 | | |
 |---|---|
-| GPU | {{GPU_LINE}} |
-| Theoretical peak | {{PEAK_LINE}} |
-| Toolchain | CUDA {{CUDA_VERSION}}, driver {{DRIVER}}, Ubuntu 24.04, gcc 13 |
+| GPU | NVIDIA GeForce RTX 3050 6GB Laptop GPU: 20 SMs × 128 FP32 lanes, compute capability 8.6, 5.7 GiB GDDR6 on a 96-bit bus, 1.5 MiB L2 ([results/device.md](results/device.md)) |
+| Theoretical peak | 7,639 FP32 GFLOPS (20 × 128 × 2 × 1.492 GHz) · 168 GB/s DRAM · ridge point 45 FLOP/byte. Measured: 157 GB/s copy, FMA loop up to 9,126 GFLOPS when the GPU boosts above its rated clock |
+| Toolchain | CUDA 13.0 (nvcc 13.0.48), driver 580.65.06, Ubuntu 24.04, gcc 13 |
 | Docs | [docs/LEARN.md](docs/LEARN.md) (CUDA from zero, kernel by kernel) · [docs/INTERVIEW.md](docs/INTERVIEW.md) (20 Q&A with these numbers) · [docs/RESUME.md](docs/RESUME.md) |
 
 ## Results
@@ -32,7 +38,7 @@ so it does the same arithmetic as our kernels.
 
 ### Details at N = 4096
 
-| Kernel | Time (ms) | GFLOPS | % of cuBLAS | % of peak | Max rel. error vs cuBLAS | SM clock (MHz) |
+| Kernel | Time (ms) | GFLOPS | % of cuBLAS | % of peak | Max rel. error vs cuBLAS | SM clock, NVML (MHz, indicative) |
 |---|---:|---:|---:|---:|---:|---:|
 | cuBLAS | 31.32 | 4,388 | 100% | 57% | reference | 1920 |
 | 1 naive | 1865.96 | 73.7 | 1.7% | 1.0% | 3.1e-06 | 1920 |
@@ -55,7 +61,21 @@ All tables, including registers, occupancy and the Nsight Compute counters, are 
 
 ## What limits each kernel
 
-{{LIMITS}}
+Measured with Nsight Compute at N = 4096 ([results/ncu/summary.md](results/ncu/summary.md)). The full
+story is in [docs/LEARN.md](docs/LEARN.md#part-2-the-kernels).
+
+| Kernel | GFLOPS | What limits it (evidence) |
+|---|---:|---|
+| 1 naive | 73.7 | **Uncoalesced loads.** 16.5 sectors per load request; warps stall ~212 cycles per instruction waiting to issue memory instructions (`lg_throttle`); FMA units 2% busy. DRAM is only 3% busy because the caches absorb the redundant traffic. |
+| 2 coalesced | 502 | **Load/store pipeline inside the SM.** 2.5 sectors per request, but still 2 global loads per FMA: SM memory throughput at 94.5% of its limit while DRAM is at 20%. |
+| 3a/3b smem tiling | 664 / 663 | **Shared-memory instruction throughput.** Global load requests fell 16–32×, but every FMA still needs 2 shared loads; top stall `mio_throttle` (~20 cycles per instruction), FMA units 8–10% busy. Tile 16 (100% occupancy) and tile 32 (half the DRAM traffic) end up equal. |
+| 4 1D register blocking | 1,894 | **Still shared-memory heavy:** 9 shared loads per 8 FMAs. `mio_throttle` down to 6.7, FMA units 23% busy. |
+| 5 2D register blocking | 3,594 | **Register pressure and bank conflicts.** At 145 registers only 1 block/SM fit; capped to 128 with `__launch_bounds__(256, 2)` for +24%. 268 M shared-load bank conflicts remain. Compute-bound side of the roofline (56.6 FLOP/byte). |
+| 6 float4 | 4,173 | **Instruction issue and bank conflicts.** Issue slots 63% used, FMA pipe 58%; top stall `not_selected` (ready warps waiting for a slot). Same 268 M bank conflicts as kernel 5: the compiler had already vectorized kernel 5's shared loads, so the gain came from 4× fewer global load instructions. |
+| cuBLAS | 4,388 | Issue slots 75%, FMA pipe 64%, **zero** bank conflicts, 2.5× fewer shared-memory wavefronts than kernel 6. The whole GPU is power-capped at ~60 W during sustained runs, which is why cuBLAS is at 57% of the theoretical peak at N = 4096 but 72% at N = 1024. |
+
+At small sizes the 128×128-tile kernels launch too few blocks (4 blocks for 20 SMs at N = 256), so the
+64×64-tile kernel 4 is the fastest of ours there.
 
 ## Build and run
 
@@ -87,7 +107,7 @@ make info                                     # show detected nvcc, GPU architec
 ```
 
 The Makefile finds `nvcc` (on `PATH` or in `/usr/local/cuda*`) and compiles for the compute capability
-`nvidia-smi` reports, here `sm_{{CC_NODOT}}`. Machine-specific overrides (e.g. `PYTHON := ...`) can go in a
+`nvidia-smi` reports, here `sm_86`. Machine-specific overrides (e.g. `PYTHON := ...`) can go in a
 git-ignored `local.mk`.
 
 ## Setup notes for this machine (Ubuntu 24.04, driver 580)
@@ -138,10 +158,33 @@ docs/                        LEARN.md, INTERVIEW.md, RESUME.md
 
 ## Methodology and honesty notes
 
-{{METHODOLOGY}}
+- **Correctness first.** Each kernel runs once with α = 0.75, β = 0.25 on a random C. Every element is
+  compared with cuBLAS, and with a double-precision CPU loop for N ≤ 512. The tolerance is K·FLT_EPSILON
+  relative to the largest reference value; measured errors are 4.9·10⁻⁷ to 3.1·10⁻⁶. Failing kernels are
+  reported and not timed.
+- **Timing.** Plain C = A·B (α = 1, β = 0). 3 warm-ups, then 10 launches each bracketed by CUDA events,
+  with a short GPU busy-wait queued first so that launch overhead never shows up as idle time. The median
+  is reported (min/max are in the CSV). A 1-second load before the first measurement brings the GPU up to
+  its boost clock.
+- **cuBLAS is called in its default FP32 mode** (no TF32 tensor cores), via the row-major trick: cuBLAS
+  is column-major, so computing Bᵀ·Aᵀ gives row-major A·B without copying data.
+- **Laptop clocks vary.** The GPU is power-capped at ~60 W, so repeated runs differ by a few percent.
+  NVML's clock reading turned out to be indicative only: the FMA microbenchmark did more work per second
+  than the NVML clock allows. The SM clock measured by Nsight Compute's cycle counters is in
+  `results/ncu/summary.csv`.
+- **"% of peak"** is against 7,639 GFLOPS at the 1,492 MHz clock CUDA reports. The GPU can boost higher
+  (NVML maximum 2,100 MHz), so this figure is a convention, not a hard ceiling.
+- **Profiling** runs each kernel once at N = 4096 under `ncu --clock-control none`. A single cold launch
+  escapes the sustained power cap, so GFLOPS under the profiler are a little higher than the benchmark
+  medians. Only the benchmark medians are quoted as performance.
+- **Kernels 4–6 need N to be a multiple of their tile size** (64 or 128). All test sizes are powers of
+  two; the harness skips sizes that don't fit.
+- **Register experiment** (kernel 5 capped at 128 registers; kernel 6 forced to 80) and its numbers:
+  [results/experiments.md](results/experiments.md).
 
 ## Acknowledgements
 
-The kernel progression follows the well-known structure of Simon Boehm's "How to Optimize a CUDA Matmul
-Kernel for cuBLAS-like Performance" and the CUDA C++ Programming Guide. All code here was written for this
-project, and every number was measured on the machine described above.
+The kernel progression, and the tile shapes of kernels 4–6, follow Simon Boehm's article "How to Optimize
+a CUDA Matmul Kernel for cuBLAS-like Performance". The concepts follow the CUDA C++ Programming Guide. The
+code in this repository was written for this project, and every number was measured on the machine
+described above.

@@ -15,7 +15,7 @@
 
 ### Details at N = 4096
 
-| Kernel | Time (ms) | GFLOPS | % of cuBLAS | % of peak | Max rel. error vs cuBLAS | SM clock (MHz) |
+| Kernel | Time (ms) | GFLOPS | % of cuBLAS | % of peak | Max rel. error vs cuBLAS | SM clock, NVML (MHz, indicative) |
 |---|---:|---:|---:|---:|---:|---:|
 | cuBLAS | 31.32 | 4,388 | 100% | 57% | reference | 1920 |
 | 1 naive | 1865.96 | 73.7 | 1.7% | 1.0% | 3.1e-06 | 1920 |
