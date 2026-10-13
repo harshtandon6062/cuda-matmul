@@ -1,0 +1,19 @@
+{
+  "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "compute_capability": "8.6",
+  "sm_count": 20,
+  "fp32_lanes_per_sm": 128,
+  "sm_clock_mhz": 1492,
+  "max_sm_clock_mhz": 2100,
+  "mem_clock_mhz": 7001,
+  "bus_width_bits": 96,
+  "global_mem_bytes": 6086262784,
+  "l2_bytes": 1572864,
+  "peak_gflops": 7639.040,
+  "peak_bandwidth_gbs": 168.024,
+  "measured_copy_gbs": 157.067,
+  "measured_fma_gflops": 7353.268,
+  "fma_sm_clock_mhz": 1492,
+  "driver": "580.65.06",
+  "cuda_runtime": "13.0"
+}
