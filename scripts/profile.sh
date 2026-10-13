@@ -54,6 +54,7 @@ rm -f "$OUT/permission_check.log"
 # 2) The metrics this project uses, on top of the standard sections.
 METRICS=(
   gpu__time_duration.sum                                  # kernel duration
+  sm__cycles_elapsed.avg.per_second                       # actual SM clock during the kernel
   smsp__sass_thread_inst_executed_op_ffma_pred_on.sum     # FP32 work actually executed:
   smsp__sass_thread_inst_executed_op_fmul_pred_on.sum     #   FLOPs = 2*FFMA + FMUL + FADD
   smsp__sass_thread_inst_executed_op_fadd_pred_on.sum

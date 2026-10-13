@@ -11,9 +11,9 @@
   "l2_bytes": 1572864,
   "peak_gflops": 7639.040,
   "peak_bandwidth_gbs": 168.024,
-  "measured_copy_gbs": 157.067,
-  "measured_fma_gflops": 7353.268,
-  "fma_sm_clock_mhz": 1492,
+  "measured_copy_gbs": 157.255,
+  "measured_fma_gflops": 9125.988,
+  "fma_sm_clock_mhz": 1875,
   "driver": "580.65.06",
   "cuda_runtime": "13.0"
 }

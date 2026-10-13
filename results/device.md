@@ -45,9 +45,9 @@ The same formula at the NVML maximum clock (2100 MHz) gives 10752.0 GFLOPS. That
 
 | Microbenchmark | Measured | % of theoretical |
 |---|---|---|
-| DRAM copy, 2 x 256 MiB buffers (read + write) | 157.1 GB/s | 93.5% |
-| FP32 FMA loop in registers (no memory traffic) | 7353.3 GFLOPS | 96.3% |
+| DRAM copy, 2 x 256 MiB buffers (read + write) | 157.3 GB/s | 93.6% |
+| FP32 FMA loop in registers (no memory traffic) | 9126.0 GFLOPS | 119.5% |
 
-SM clock read by NVML while the FMA loop ran: **1492 MHz**. If every FP32 lane completed one FMA per cycle, the measured rate would correspond to a 1436 MHz clock (measured GFLOPS / (2 x 2560 lanes)).
+SM clock sampled by NVML every 10 ms while the FMA loop ran: median **1875 MHz** (range 1492-1875 MHz). The measured rate implies an average clock of at least 1782 MHz (measured GFLOPS / (2 x 2560 lanes), the clock needed if every lane finished one FMA per cycle).
 
 Laptop GPUs run above or below the reported clock depending on power and temperature, so measured throughput can differ from the formula in either direction.

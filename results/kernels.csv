@@ -1,0 +1,8 @@
+kernel,threads_per_block,registers_per_thread,static_smem_bytes,local_mem_bytes,blocks_per_sm,warps_per_sm,theoretical_occupancy_pct,occupancy_limited_by
+1_naive,1024,40,0,0,1,32,66.7,threads + registers
+2_coalesced,1024,40,0,0,1,32,66.7,threads + registers
+3a_smem_tile16,256,38,2048,0,6,48,100.0,threads + registers
+3b_smem_tile32,1024,38,8192,0,1,32,66.7,threads + registers
+4_regblock_1d,512,52,4096,0,2,32,66.7,registers
+5_regblock_2d,256,128,8192,0,2,16,33.3,registers
+6_vectorized,256,102,8192,0,2,16,33.3,registers

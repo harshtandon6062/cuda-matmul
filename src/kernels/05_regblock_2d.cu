@@ -28,13 +28,21 @@
 // 4 passes of 2 rows. Per block-step that is (128 + 128) * 8 floats loaded for 128*128*8 FMAs:
 // each float loaded from global memory feeds 64 FMAs (kernel 4: 32).
 //
+// __launch_bounds__(256, 2) below tells the compiler: "blocks have at most 256 threads, and I want
+// at least 2 of them resident per SM". 2 x 256 threads must share 65536 registers, so the compiler
+// caps itself at 128 registers per thread. Measured on this GPU (results/experiments.md):
+//     without the hint: 145 registers -> 1 block/SM (8 warps)  -> ~3000 GFLOPS at N=4096
+//     with the hint:    128 registers -> 2 blocks/SM (16 warps) -> ~3720 GFLOPS, no spills
+// Pushing the same idea too far backfires: forcing kernel 6 down to 80 registers made it spill to
+// (slow, off-chip) local memory and run 5.7x slower.
+//
 // Requirement: M, N multiples of 128, K a multiple of 8.
 // =============================================================================
 #include "../common.cuh"
 #include "../kernels.cuh"
 
 template <int BM, int BN, int BK, int TM, int TN>
-__global__ void __launch_bounds__((BM * BN) / (TM * TN))
+__global__ void __launch_bounds__((BM * BN) / (TM * TN), 2)
 sgemm_v5_regblock_2d(int M, int N, int K, float alpha, const float* A, const float* B, float beta,
                      float* C) {
     constexpr int kThreads = (BM * BN) / (TM * TN);

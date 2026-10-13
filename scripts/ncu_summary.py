@@ -73,6 +73,7 @@ def main():
             "N": n,
             "ncu_kernel_name": name.split("(")[0].strip(),
             "duration_ms": t_s * 1e3,
+            "sm_clock_mhz": num(r, "sm__cycles_elapsed.avg.per_second") / 1e6,  # base unit: cycles/second
             "gflops_under_ncu": ratio(flops, t_s) / 1e9,
             "flops": flops,
             "dram_bytes": dram,
@@ -117,14 +118,14 @@ def main():
     lines = [
         f"Nsight Compute, N = {n}, `--clock-control none` (GPU boosts as in the benchmark).",
         "",
-        "| Kernel | DRAM traffic | DRAM throughput | AI vs DRAM (FLOP/B) | AI vs L2 (FLOP/B) | FMA pipe busy | "
+        "| Kernel | SM clock | DRAM traffic | DRAM throughput | AI vs DRAM (FLOP/B) | AI vs L2 (FLOP/B) | FMA pipe busy | "
         "Achieved / theoretical occupancy | Global load sectors per request | Shared-mem bank conflicts (ld / st) "
         "| Top warp stall reasons (cycles per issued instruction) |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for o in out:
         lines.append(
-            f"| {o['kernel']} | {f(o['dram_bytes'] / 1e6, ',.0f')} MB | {f(o['dram_gbs'], '.1f')} GB/s "
+            f"| {o['kernel']} | {f(o['sm_clock_mhz'], '.0f')} MHz | {f(o['dram_bytes'] / 1e6, ',.0f')} MB | {f(o['dram_gbs'], '.1f')} GB/s "
             f"({f(o['dram_pct_of_peak'], '.0f')}%) | {f(o['ai_dram'], '.1f')} | {f(o['ai_l2'], '.1f')} | "
             f"{f(o['fma_pipe_pct'], '.0f')}% | {f(o['achieved_occupancy_pct'], '.0f')}% / "
             f"{f(o['theoretical_occupancy_pct'], '.0f')}% | {f(o['global_ld_sectors_per_request'], '.1f')} | "

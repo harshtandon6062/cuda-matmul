@@ -17,6 +17,8 @@
 // =============================================================================
 #include <algorithm>
 #include <cfloat>
+#include <chrono>
+#include <thread>
 #include <climits>
 #include <cmath>
 #include <cstdio>
@@ -250,8 +252,15 @@ Timing time_launches(F&& launch, int warmup, int reps, long long spin_cycles, co
     }
     CUDA_CHECK(cudaGetLastError());
 
+    // Sample the SM clock every ~2 ms while the timed launches run; report the median sample.
     Timing t;
-    t.sm_clock_mhz = mon.sm_clock_mhz();
+    std::vector<int> clocks{mon.sm_clock_mhz()};
+    while (cudaEventQuery(stop[reps - 1]) == cudaErrorNotReady && clocks.size() < 200) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        clocks.push_back(mon.sm_clock_mhz());
+    }
+    std::sort(clocks.begin(), clocks.end());
+    t.sm_clock_mhz = clocks[clocks.size() / 2];
     t.temp_c = mon.temperature_c();
     CUDA_CHECK(cudaEventSynchronize(stop[reps - 1]));
 
@@ -472,6 +481,33 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     write_csv_header(csv);
+
+    // A laptop GPU idles at a few hundred MHz and needs a moment of real load to reach its boost
+    // clock. Keep it busy for about a second before the first measurement, so the small sizes at
+    // the start are not timed on a half-asleep GPU.
+    {
+        const int n = 1024;
+        float *a, *c;
+        CUDA_CHECK(cudaMalloc(&a, sizeof(float) * n * n));
+        CUDA_CHECK(cudaMalloc(&c, sizeof(float) * n * n));
+        CUDA_CHECK(cudaMemset(a, 0, sizeof(float) * n * n));
+        cudaEvent_t s, e;
+        CUDA_CHECK(cudaEventCreate(&s));
+        CUDA_CHECK(cudaEventCreate(&e));
+        float elapsed = 0.0f;
+        CUDA_CHECK(cudaEventRecord(s));
+        while (elapsed < 1000.0f) {
+            for (int i = 0; i < 20; ++i) cublas_sgemm(handle, n, n, n, 1.0f, a, a, 0.0f, c);
+            CUDA_CHECK(cudaEventRecord(e));
+            CUDA_CHECK(cudaEventSynchronize(e));
+            CUDA_CHECK(cudaEventElapsedTime(&elapsed, s, e));
+        }
+        std::printf("GPU spin-up: 1 s of load, SM clock now %d MHz\n", mon.sm_clock_mhz());
+        CUDA_CHECK(cudaEventDestroy(s));
+        CUDA_CHECK(cudaEventDestroy(e));
+        CUDA_CHECK(cudaFree(a));
+        CUDA_CHECK(cudaFree(c));
+    }
 
     const long long spin_cycles = 2LL * dev.sm_clock_khz;  // ~2 ms
     int failures = 0;

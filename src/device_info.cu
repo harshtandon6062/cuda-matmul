@@ -108,7 +108,8 @@ BandwidthResult measure_copy_bandwidth() {
 
 struct FmaResult {
     double gflops = 0;
-    int clock_mhz = -1;  // SM clock sampled while the benchmark was running
+    int clock_mhz = -1;  // median SM clock sampled while the benchmark was running
+    int clock_min_mhz = -1, clock_max_mhz = -1;
 };
 
 FmaResult measure_fma_throughput(const DeviceSummary& d, const GpuMonitor& mon) {
@@ -124,12 +125,22 @@ FmaResult measure_fma_throughput(const DeviceSummary& d, const GpuMonitor& mon) 
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    // Queue a few runs and read the clock while they execute.
-    for (int i = 0; i < 4; ++i) run();
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    FmaResult r;
-    r.clock_mhz = mon.sm_clock_mhz();
+    // Queue ~20 runs and read the clock every 10 ms while they execute; keep the median reading.
+    for (int i = 0; i < 20; ++i) run();
+    std::vector<int> clocks;
+    for (int i = 0; i < 20; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (cudaStreamQuery(0) != cudaErrorNotReady) break;  // all queued runs finished
+        clocks.push_back(mon.sm_clock_mhz());
+    }
     CUDA_CHECK(cudaDeviceSynchronize());
+    FmaResult r;
+    if (!clocks.empty()) {
+        std::sort(clocks.begin(), clocks.end());
+        r.clock_mhz = clocks[clocks.size() / 2];
+        r.clock_min_mhz = clocks.front();
+        r.clock_max_mhz = clocks.back();
+    }
 
     const float ms = median_ms(run, 7);
     CUDA_CHECK(cudaFree(out));
@@ -253,9 +264,17 @@ int main(int argc, char** argv) {
     std::fprintf(md, "| FP32 FMA loop in registers (no memory traffic) | %.1f GFLOPS | %.1f%% |\n\n", fma.gflops,
                  100.0 * fma.gflops / peak);
     if (fma.clock_mhz > 0)
-        std::fprintf(md, "SM clock read by NVML while the FMA loop ran: **%d MHz**. ", fma.clock_mhz);
-    std::fprintf(md, "If every FP32 lane completed one FMA per cycle, the measured rate would correspond to a "
-                     "%.0f MHz clock (measured GFLOPS / (2 x %d lanes)).\n\n", implied_clock_mhz, lanes_total);
+        std::fprintf(md, "SM clock sampled by NVML every 10 ms while the FMA loop ran: median **%d MHz** "
+                         "(range %d-%d MHz). ", fma.clock_mhz, fma.clock_min_mhz, fma.clock_max_mhz);
+    std::fprintf(md, "The measured rate implies an average clock of at least %.0f MHz (measured GFLOPS / "
+                     "(2 x %d lanes), the clock needed if every lane finished one FMA per cycle).\n\n",
+                 implied_clock_mhz, lanes_total);
+    if (fma.clock_mhz > 0 && implied_clock_mhz > fma.clock_mhz * 1.02)
+        std::fprintf(md, "The implied clock is *higher* than NVML's reading, which is physically impossible if NVML "
+                         "were exact: on this machine NVML's clock value does not follow the real boost clock "
+                         "closely. Nsight Compute's cycle counter (`sm__cycles_elapsed.avg.per_second`, in "
+                         "`results/ncu/`) is the trustworthy clock measurement; NVML readings in "
+                         "`results.csv` are indicative only.\n\n");
     std::fprintf(md, "Laptop GPUs run above or below the reported clock depending on power and temperature, "
                      "so measured throughput can differ from the formula in either direction.\n");
     std::fclose(md);

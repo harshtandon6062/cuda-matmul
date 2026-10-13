@@ -118,7 +118,7 @@ def plot_roofline(df, dev, ncu):
     ax.axvline(ridge, color="gray", ls=":", lw=1)
     ax.text(ridge * 1.08, peak * 0.012, f"ridge point\n{ridge:.0f} FLOP/byte", fontsize=8, color="gray")
     ax.text(x[0] * 1.3, bw * x[0] * 3.2, "memory-bound", rotation=33, fontsize=9, color="gray")
-    ax.text(ridge * 4, peak * 1.12, "compute-bound", fontsize=9, color="gray")
+    ax.text(ridge * 4, peak * 0.6, "compute-bound", fontsize=9, color="gray")
 
     for kid, label, _ in KERNELS + [CUBLAS]:
         a = ai.get(kid, math.nan)

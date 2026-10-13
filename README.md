@@ -17,6 +17,31 @@ double-precision CPU reference for N ≤ 512). cuBLAS runs in its default FP32 m
 so it does the same arithmetic as our kernels.
 
 <!-- RESULTS:BEGIN -->
+### GFLOPS by matrix size (percent of cuBLAS in parentheses)
+
+| Kernel | N = 256 | N = 512 | N = 1024 | N = 2048 | N = 4096 |
+|---|---:|---:|---:|---:|---:|
+| cuBLAS | **1,973** | **4,228** | **5,533** | **5,124** | **4,388** |
+| 1 naive | 52.3 (2.6%) | 72.4 (1.7%) | 72.9 (1.3%) | 74.0 (1.4%) | 73.7 (1.7%) |
+| 2 coalesced | 428 (22%) | 588 (14%) | 533 (9.6%) | 513 (10%) | 502 (11%) |
+| 3a smem tiling, 16x16 | 655 (33%) | 771 (18%) | 743 (13%) | 681 (13%) | 664 (15%) |
+| 3b smem tiling, 32x32 | 541 (27%) | 728 (17%) | 646 (12%) | 676 (13%) | 663 (15%) |
+| 4 1D register blocking | 1,260 (64%) | 1,827 (43%) | 2,081 (38%) | 1,859 (36%) | 1,894 (43%) |
+| 5 2D register blocking | 618 (31%) | 2,545 (60%) | 3,452 (62%) | 3,908 (76%) | 3,594 (82%) |
+| 6 2D + float4 loads | 762 (39%) | 2,621 (62%) | 4,178 (76%) | 4,643 (91%) | 4,173 (95%) |
+
+### Details at N = 4096
+
+| Kernel | Time (ms) | GFLOPS | % of cuBLAS | % of peak | Max rel. error vs cuBLAS | SM clock (MHz) |
+|---|---:|---:|---:|---:|---:|---:|
+| cuBLAS | 31.32 | 4,388 | 100% | 57% | reference | 1920 |
+| 1 naive | 1865.96 | 73.7 | 1.7% | 1.0% | 3.1e-06 | 1920 |
+| 2 coalesced | 273.60 | 502 | 11% | 6.6% | 3.1e-06 | 1680 |
+| 3a smem tiling, 16x16 | 206.88 | 664 | 15% | 8.7% | 3.1e-06 | 1605 |
+| 3b smem tiling, 32x32 | 207.32 | 663 | 15% | 8.7% | 3.1e-06 | 1830 |
+| 4 1D register blocking | 72.57 | 1,894 | 43% | 25% | 3.1e-06 | 1612 |
+| 5 2D register blocking | 38.25 | 3,594 | 82% | 47% | 3.1e-06 | 1815 |
+| 6 2D + float4 loads | 32.93 | 4,173 | 95% | 55% | 3.1e-06 | 1642 |
 <!-- RESULTS:END -->
 
 ![GFLOPS vs N](results/gflops.png)
